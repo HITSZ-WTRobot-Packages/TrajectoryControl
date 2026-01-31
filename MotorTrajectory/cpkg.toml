@@ -1,0 +1,8 @@
+name = "MotorTrajectory"
+pkgname = "Trajectory::MotorTrajectory"
+version = "0.1.0"
+dependencies = [
+    "VelocityProfile::SCurve",
+    "MotorDrivers::Controller",
+    "libs::PID_PD"
+]
