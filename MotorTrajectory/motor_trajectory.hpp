@@ -108,6 +108,9 @@ template <size_t MotorNum> void MotorTrajectory<MotorNum>::profileUpdate(const f
     p_ref_curr_     = profile_.CalcX(now_);
     v_ref_curr_     = profile_.CalcV(now_);
     v_ref_curr_rpm_ = DPS2RPM(v_ref_curr_);
+
+    for (size_t i = 0; i < MotorNum; ++i)
+        ctrl_[i]->setRef(DPS2RPM(v_ref_curr_ + pd_[i].getOutput()));
 }
 
 /**
