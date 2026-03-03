@@ -27,6 +27,15 @@ public:
                     velocity_profile::SCurveProfile::Config profile_cfg,
                     const PD::Config&                       error_pd_cfg);
 
+    template <size_t N = MotorNum, typename = std::enable_if_t<N == 1>>
+    MotorTrajectory(controllers::MotorVelController*        motor_controller,
+                    velocity_profile::SCurveProfile::Config profile_cfg,
+                    const PD::Config&                       error_pd_cfg) :
+        ctrl_{ motor_controller }, pd_{ PD(error_pd_cfg) }, profile_cfg_(profile_cfg),
+        profile_(profile_cfg, 0, 0, 0, 0)
+    {
+    }
+
     void profileUpdate(float dt);
     void errorUpdate();
     void controllerUpdate();
@@ -35,8 +44,21 @@ public:
     bool setTarget(const float& target);
     bool setRelativeTarget(const float& target);
 
-    float getCurrentAvePosition() const;
-    float getCurrentAveVelocity() const;
+    [[nodiscard]] float getCurrentAvePosition() const;
+    [[nodiscard]] float getCurrentAveVelocity() const;
+
+    template <size_t N = MotorNum, typename = std::enable_if_t<N == 1>>
+    [[nodiscard]] float getCurrentPosition() const
+    {
+        return ctrl_[0]->getPosition();
+    }
+    template <size_t N = MotorNum, typename = std::enable_if_t<N == 1>>
+    [[nodiscard]] float getCurrentVelocity() const
+    {
+        return ctrl_[0]->getVelocity();
+    }
+
+    [[nodiscard]] float getTotalTime() const { return profile_.getTotalTime(); }
 
     bool enable()
     {
@@ -57,11 +79,13 @@ public:
             ctrl->disable();
     }
 
-    bool enabled() const { return enabled_; }
+    [[nodiscard]] bool enabled() const { return enabled_; }
 
-    void lock() { lock_ = true; }
-    void unlock() { lock_ = false; }
-    bool locked() const { return lock_; }
+    void               lock() { lock_ = true; }
+    void               unlock() { lock_ = false; }
+    [[nodiscard]] bool locked() const { return lock_; }
+
+    [[nodiscard]] bool isFinished() const { return now_ >= profile_.getTotalTime(); }
 
 private:
     bool enabled_{ false };
