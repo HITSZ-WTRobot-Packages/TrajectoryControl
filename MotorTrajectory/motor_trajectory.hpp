@@ -26,7 +26,7 @@ public:
     using ProfileConfig = velocity_profile::SCurveProfile::Config;
 
     MotorTrajectory(controllers::MotorVelController* motor_controllers[MotorNum],
-                    ProfileConfig                    profile_cfg,
+                    const ProfileConfig&             profile_cfg,
                     const PD::Config&                error_pd_cfg) :
         default_profile_cfg_(profile_cfg), profile_(profile_cfg, 0, 0, 0, 0)
     {
@@ -37,9 +37,22 @@ public:
             p.setConfig(error_pd_cfg);
     }
 
+    // 允许直接传入实例数组，而不是指针数组
+    MotorTrajectory(controllers::MotorVelController (&motors)[MotorNum],
+                    ProfileConfig     profile_cfg,
+                    const PD::Config& error_pd_cfg) :
+        default_profile_cfg_(profile_cfg), profile_(profile_cfg, 0, 0, 0, 0)
+    {
+        for (size_t i = 0; i < MotorNum; ++i)
+            ctrl_[i] = &motors[i];
+
+        for (auto& p : pd_)
+            p.setConfig(error_pd_cfg);
+    }
+
     template <size_t N = MotorNum, typename = std::enable_if_t<N == 1>>
     MotorTrajectory(controllers::MotorVelController* motor_controller,
-                    ProfileConfig                    profile_cfg,
+                    const ProfileConfig&             profile_cfg,
                     const PD::Config&                error_pd_cfg) :
         ctrl_{ motor_controller }, pd_{ PD(error_pd_cfg) }, default_profile_cfg_(profile_cfg),
         profile_(profile_cfg, 0, 0, 0, 0)
