@@ -208,6 +208,7 @@ public:
         stop();
         for (auto& ctrl : ctrl_)
             ctrl->disable();
+        enabled_ = false;
     }
 
     [[nodiscard]] bool enabled() const { return enabled_; }
