@@ -20,6 +20,12 @@
 namespace trajectory
 {
 
+enum class LinkMode
+{
+    CurrentState,  // 使用当前状态衔接
+    PreviousCurve, // 衔接之前曲线
+};
+
 template <size_t MotorNum> class MotorTrajectory
 {
 public:
@@ -106,17 +112,49 @@ public:
         v_ref_curr_ = 0;
     }
 
-    bool setTarget(const float& target, const ProfileConfig& config)
+    bool setTarget(const float target, const LinkMode link_mode, const ProfileConfig& config)
     {
+        // TODO: 增加可选衔接方式
+
         if (!enabled() || locked())
             return false;
 
+        float xs = 0, vs = 0, as = 0;
+        if (stopped_)
+        {
+            xs = getCurrentAvePosition();
+            vs = 0;
+            as = 0;
+        }
+        else if (link_mode == LinkMode::CurrentState)
+        {
+            xs = getCurrentAvePosition();
+            vs = getCurrentAveVelocity();
+            as = 0;
+        }
+        else if (link_mode == LinkMode::PreviousCurve)
+        {
+            xs = profile_.CalcX(now_);
+            vs = profile_.CalcV(now_);
+            as = profile_.CalcA(now_);
+        }
+
+        float amin = -config.max_acc, amax = config.max_acc;
+        if (vs < -config.max_spd)
+        {
+            amin = 0;
+            vs   = -config.max_spd;
+        }
+        else if (vs > config.max_spd)
+        {
+            amax = 0;
+            vs   = config.max_spd;
+        }
+        as = std::clamp(as, amin, amax);
+
         // try to construct profile
-        const velocity_profile::SCurveProfile p(config,
-                                                getCurrentAvePosition(),
-                                                getCurrentAveVelocity(),
-                                                profile_.CalcA(now_),
-                                                target);
+        const velocity_profile::SCurveProfile p(config, xs, vs, as, target);
+
         // if failed
         if (!p.success())
             // if failed, return false;
@@ -129,36 +167,52 @@ public:
         unlock();
         return true;
     }
+    bool setTarget(const float target)
+    {
+        return setTarget(target, LinkMode::CurrentState, default_profile_cfg_);
+    }
+    bool setTarget(const float target, const LinkMode link_mode)
+    {
+        return setTarget(target, link_mode, default_profile_cfg_);
+    }
+    bool setTarget(const float target, const ProfileConfig& config)
+    {
+        return setTarget(target, LinkMode::CurrentState, config);
+    }
 
-    bool setTarget(const float& target) { return setTarget(target, default_profile_cfg_); }
-
-    bool setRelativeTarget(const float& target, const ProfileConfig& config)
+    bool setRelativeTarget(const float          target,
+                           const LinkMode       link_mode,
+                           const ProfileConfig& config)
     {
         if (!enabled() || locked())
             return false;
 
-        // try to construct profile
-        const velocity_profile::SCurveProfile p(config,
-                                                getCurrentAvePosition(),
-                                                getCurrentAveVelocity(),
-                                                profile_.CalcA(now_),
-                                                getCurrentAvePosition() + target);
-        // if failed
-        if (!p.success())
-            // if failed, return false;
-            return false;
-        // if success, set profile and reset now
-        lock(); // lock before writing
-        profile_ = p;
-        now_     = 0;
-        stopped_ = false;
-        unlock();
-        return true;
-    }
+        float base_pos = 0;
 
-    bool setRelativeTarget(const float& target)
+        // 根据衔接模式确定相对位移的基准点
+        if (link_mode == LinkMode::PreviousCurve && !stopped_)
+        {
+            base_pos = profile_.CalcX(now_); // 以当前轨迹的理论位置为基准
+        }
+        else
+        {
+            base_pos = getCurrentAvePosition(); // 以当前实际反馈位置为基准 [cite: 6]
+        }
+
+        // 调用已有的 setTarget 逻辑完成规划 [cite: 4, 21]
+        return setTarget(base_pos + target, link_mode, config);
+    }
+    bool setRelativeTarget(const float target)
     {
-        return setRelativeTarget(target, default_profile_cfg_);
+        return setRelativeTarget(target, LinkMode::CurrentState, default_profile_cfg_);
+    }
+    bool setRelativeTarget(const float target, const LinkMode link_mode)
+    {
+        return setRelativeTarget(target, link_mode, default_profile_cfg_);
+    }
+    bool setRelativeTarget(const float target, const ProfileConfig& config)
+    {
+        return setRelativeTarget(target, LinkMode::CurrentState, config);
     }
 
     [[nodiscard]] float getCurrentAvePosition() const
