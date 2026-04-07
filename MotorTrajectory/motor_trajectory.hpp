@@ -5,10 +5,11 @@
  */
 #ifndef MOTOR_TRAJECTORY_HPP
 #define MOTOR_TRAJECTORY_HPP
+#include "cstddef"
 #include "motor_vel_controller.hpp"
 #include "pid_pd.hpp"
 #include "s_curve.hpp"
-#include "cstddef"
+#include <algorithm>
 #include <array>
 
 /**
