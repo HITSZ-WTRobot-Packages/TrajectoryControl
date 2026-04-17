@@ -115,8 +115,6 @@ public:
 
     bool setTarget(const float target, const LinkMode link_mode, const ProfileConfig& config)
     {
-        // TODO: 增加可选衔接方式
-
         if (!enabled() || locked())
             return false;
 
@@ -276,12 +274,13 @@ public:
 
     void setDefaultProfileConfig(const ProfileConfig& cfg) { default_profile_cfg_ = cfg; }
 
+protected:
+    controllers::MotorVelController* ctrl_[MotorNum]{};
+
 private:
     bool enabled_{ false };
     bool lock_{ false };
     bool stopped_{ true };
-
-    controllers::MotorVelController* ctrl_[MotorNum]{};
 
     PD pd_[MotorNum]{};
 

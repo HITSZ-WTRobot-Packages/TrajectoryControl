@@ -1,0 +1,4 @@
+format_version = 1
+name = "HomingMotorTrajectory"
+pkgname = "Trajectory::HomingMotorTrajectory"
+dependencies = ["MotorDrivers::Controller", "Trajectory::MotorTrajectory", "stm32cubemx"]
