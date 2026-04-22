@@ -60,7 +60,7 @@ public:
     {
     }
 
-    bool enabled() { return Parent::enabled() && isCalibrated(); }
+    [[nodiscard]] bool enabled() const { return Parent::enabled() && isCalibrated(); }
 
     void startCalibration()
     {

@@ -1,1 +1,2 @@
 add_subdirectory(MotorTrajectory)
+add_subdirectory(HomingMotorTrajectory)
