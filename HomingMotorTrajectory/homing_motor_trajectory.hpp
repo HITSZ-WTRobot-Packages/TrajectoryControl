@@ -78,7 +78,7 @@ public:
             ctrl->setRef(cfg_.speed);
             ctrl->enable();
 
-            calib.stalled_ticks = 0;
+            calib.stall_start_tick = 0;
             calib.stalling      = false;
             calib.state         = MotorCalibration::State::Finding;
         }
@@ -134,7 +134,7 @@ public:
                         }
                         else
                         {
-                            calib.stalled_ticks = now;
+                            calib.stall_start_tick = now;
                             calib.stall_angle   = ctrl->getMotor()->getAngle();
                         }
                     }
@@ -171,7 +171,7 @@ public:
         return Parent::setTarget(cfg_.offset + target, config);
     }
 
-    bool isCalibrated() { return state_ == CalibrationState::Done; }
+    bool isCalibrated() const { return state_ == CalibrationState::Done; }
 
 private:
     enum class CalibrationState
