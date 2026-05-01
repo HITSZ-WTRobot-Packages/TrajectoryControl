@@ -49,7 +49,9 @@ public:
         float    max_current; ///< 堵转寻点时速度环输出上限
         uint32_t min_ticks;   ///< 堵转最小持续时间，单位 ms
 
-        float offset; ///< 零点相对于堵转位置的偏移
+        float offset; ///< 逻辑零点相对于堵转位置的偏移
+
+        float target_after_homing = 0.0f; ///< 寻零完成后自动回到的逻辑目标位置
 
         float dead_angle = 0.1f; ///< 堵转检测过程允许的角度误差，单位 deg
     };
@@ -62,9 +64,12 @@ public:
 
     [[nodiscard]] bool enabled() const { return Parent::enabled() && isCalibrated(); }
 
-    void startCalibration()
+    void startCalibration() { startCalibration(cfg_.target_after_homing); }
+
+    void startCalibration(const float target_after_homing)
     {
         Parent::disable();
+        calibration_target_ = target_after_homing;
 
         // 对每个电机单独启动校准
         for (size_t i = 0; i < MotorNum; i++)
@@ -79,8 +84,8 @@ public:
             ctrl->enable();
 
             calib.stall_start_tick = 0;
-            calib.stalling      = false;
-            calib.state         = MotorCalibration::State::Finding;
+            calib.stalling         = false;
+            calib.state            = MotorCalibration::State::Finding;
         }
 
         state_ = CalibrationState::MotorFinding;
@@ -135,7 +140,7 @@ public:
                         else
                         {
                             calib.stall_start_tick = now;
-                            calib.stall_angle   = ctrl->getMotor()->getAngle();
+                            calib.stall_angle      = ctrl->getMotor()->getAngle();
                         }
                     }
                 }
@@ -143,13 +148,13 @@ public:
 
             if (all_done)
             {
-                state_ = CalibrationState::Zeroing;
+                state_ = CalibrationState::MovingToTarget;
                 Parent::enable();
-                setTarget(0);
+                setTarget(calibration_target_);
             }
             return;
         }
-        if (state_ == CalibrationState::Zeroing)
+        if (state_ == CalibrationState::MovingToTarget)
         {
             if (Parent::isFinished())
                 state_ = CalibrationState::Done;
@@ -178,11 +183,13 @@ private:
     {
         Idle,
         MotorFinding,
-        Zeroing,
+        MovingToTarget,
         Done,
     };
 
     CalibrationConfig cfg_{};
+
+    float calibration_target_{ 0.0f };
 
     CalibrationState state_ = CalibrationState::Idle;
 
