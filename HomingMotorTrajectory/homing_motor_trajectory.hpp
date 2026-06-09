@@ -62,6 +62,7 @@ public:
     {
     }
 
+    // TODO: 这 TM 什么狗屎使能关系，找哪天修了
     [[nodiscard]] bool enabled() const { return Parent::enabled() && isCalibrated(); }
 
     void startCalibration() { startCalibration(cfg_.target_after_homing); }
