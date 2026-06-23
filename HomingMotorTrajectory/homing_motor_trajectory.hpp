@@ -149,10 +149,15 @@ public:
 
             if (all_done)
             {
+                if (!Parent::enable())
+                    return; // 或进入 Error 状态
+
+                if (!setTarget(calibration_target_))
+                    return; // 或进入 Error 状态
+
                 state_ = CalibrationState::MovingToTarget;
-                Parent::enable();
-                setTarget(calibration_target_);
             }
+
             return;
         }
         if (state_ == CalibrationState::MovingToTarget)
