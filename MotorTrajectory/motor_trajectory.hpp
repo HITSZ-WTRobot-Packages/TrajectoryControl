@@ -9,6 +9,7 @@
 #include "motor_vel_controller.hpp"
 #include "pid_pd.hpp"
 #include "s_curve.hpp"
+#include "isr_lock.h"
 #include <algorithm>
 #include <array>
 
