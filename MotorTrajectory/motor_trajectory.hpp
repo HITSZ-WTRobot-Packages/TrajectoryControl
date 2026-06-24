@@ -72,7 +72,7 @@ public:
      */
     void profileUpdate(const float dt)
     {
-        if (!enabled() || locked() || stopped_)
+        if (!enabled() || stopped_)
             return;
         now_ += dt;
         p_ref_curr_     = profile_.CalcX(now_);
@@ -88,7 +88,7 @@ public:
      */
     void errorUpdate()
     {
-        if (!enabled() || locked())
+        if (!enabled())
             return;
         for (size_t i = 0; i < MotorNum; ++i)
             ctrl_[i]->setRef(DPS2RPM(v_ref_curr_ +
@@ -100,7 +100,7 @@ public:
      */
     void controllerUpdate()
     {
-        if (!enabled() || locked())
+        if (!enabled())
             return;
         for (auto& ctrl : ctrl_)
             ctrl->update();
@@ -115,7 +115,7 @@ public:
 
     bool setTarget(const float target, const LinkMode link_mode, const ProfileConfig& config)
     {
-        if (!enabled() || locked())
+        if (!enabled())
             return false;
 
         float xs = 0, vs = 0, as = 0;
@@ -153,17 +153,21 @@ public:
 
         // try to construct profile
         const velocity_profile::SCurveProfile p(config, xs, vs, as, target);
-
-        // if failed
-        if (!p.success())
-            // if failed, return false;
-            return false;
-        // if success, set profile and reset now
-        lock(); // lock before writing
-        profile_ = p;
-        now_     = 0;
-        stopped_ = false;
-        unlock();
+        {
+            // isr guard on writing.
+            ISRGuard lock{};
+            // if failed
+            if (!p.success())
+            {
+                last_failure_info_ = p.failureInfo();
+                // if failed, return false;
+                return false;
+            }
+            // if success, set profile and reset now
+            profile_ = p;
+            now_     = 0;
+            stopped_ = false;
+        }
         return true;
     }
     bool setTarget(const float target)
@@ -183,7 +187,7 @@ public:
                            const LinkMode       link_mode,
                            const ProfileConfig& config)
     {
-        if (!enabled() || locked())
+        if (!enabled())
             return false;
 
         float base_pos = 0;
@@ -244,6 +248,11 @@ public:
 
     [[nodiscard]] float getTotalTime() const { return profile_.getTotalTime(); }
 
+    [[nodiscard]] const velocity_profile::SCurveProfile::FailureInfo& lastFailureInfo() const
+    {
+        return last_failure_info_;
+    }
+
     bool enable()
     {
         bool enabled = true;
@@ -266,10 +275,6 @@ public:
 
     [[nodiscard]] bool enabled() const { return enabled_; }
 
-    void               lock() { lock_ = true; }
-    void               unlock() { lock_ = false; }
-    [[nodiscard]] bool locked() const { return lock_; }
-
     [[nodiscard]] bool isFinished() const { return now_ >= profile_.getTotalTime(); }
 
     void setDefaultProfileConfig(const ProfileConfig& cfg) { default_profile_cfg_ = cfg; }
@@ -279,13 +284,14 @@ protected:
 
 private:
     bool enabled_{ false };
-    bool lock_{ false };
     bool stopped_{ true };
 
     PD pd_[MotorNum]{};
 
     ProfileConfig                   default_profile_cfg_;
     velocity_profile::SCurveProfile profile_;
+
+    velocity_profile::SCurveProfile::FailureInfo last_failure_info_{};
 
     float p_ref_curr_{ 0 };
     float v_ref_curr_{ 0 };
