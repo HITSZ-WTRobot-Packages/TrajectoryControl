@@ -35,8 +35,10 @@ public:
 
     MotorTrajectory(controllers::MotorVelController* motor_controllers[MotorNum],
                     const ProfileConfig&             profile_cfg,
-                    const PD::Config&                error_pd_cfg) :
-        default_profile_cfg_(profile_cfg), profile_(profile_cfg, 0, 0, 0, 0)
+                    const PD::Config&                error_pd_cfg,
+                    const float                      finish_threshold = 2.0) :
+        finish_threshold_(finish_threshold), default_profile_cfg_(profile_cfg),
+        profile_(profile_cfg, 0, 0, 0, 0)
     {
         for (size_t i = 0; i < MotorNum; ++i)
             ctrl_[i] = motor_controllers[i];
@@ -48,8 +50,10 @@ public:
     // 允许直接传入实例数组，而不是指针数组
     MotorTrajectory(controllers::MotorVelController (&motors)[MotorNum],
                     ProfileConfig     profile_cfg,
-                    const PD::Config& error_pd_cfg) :
-        default_profile_cfg_(profile_cfg), profile_(profile_cfg, 0, 0, 0, 0)
+                    const PD::Config& error_pd_cfg,
+                    const float       finish_threshold = 2.0) :
+        finish_threshold_(finish_threshold), default_profile_cfg_(profile_cfg),
+        profile_(profile_cfg, 0, 0, 0, 0)
     {
         for (size_t i = 0; i < MotorNum; ++i)
             ctrl_[i] = &motors[i];
@@ -61,9 +65,10 @@ public:
     template <size_t N = MotorNum, typename = std::enable_if_t<N == 1>>
     MotorTrajectory(controllers::MotorVelController* motor_controller,
                     const ProfileConfig&             profile_cfg,
-                    const PD::Config&                error_pd_cfg) :
-        ctrl_{ motor_controller }, pd_{ PD(error_pd_cfg) }, default_profile_cfg_(profile_cfg),
-        profile_(profile_cfg, 0, 0, 0, 0)
+                    const PD::Config&                error_pd_cfg,
+                    const float                      finish_threshold = 2.0) :
+        ctrl_{ motor_controller }, finish_threshold_(finish_threshold), pd_{ PD(error_pd_cfg) },
+        default_profile_cfg_(profile_cfg), profile_(profile_cfg, 0, 0, 0, 0)
     {
     }
 
@@ -276,7 +281,11 @@ public:
 
     [[nodiscard]] bool enabled() const { return enabled_; }
 
-    [[nodiscard]] bool isFinished() const { return now_ >= profile_.getTotalTime(); }
+    [[nodiscard]] bool isFinished() const
+    {
+        return now_ >= profile_.getTotalTime() &&
+               fabsf(p_ref_curr_ - getCurrentAvePosition()) < finish_threshold_;
+    }
 
     void setDefaultProfileConfig(const ProfileConfig& cfg) { default_profile_cfg_ = cfg; }
 
@@ -286,6 +295,8 @@ protected:
 private:
     bool enabled_{ false };
     bool stopped_{ true };
+
+    float finish_threshold_;
 
     PD pd_[MotorNum]{};
 
