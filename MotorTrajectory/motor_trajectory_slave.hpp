@@ -92,8 +92,8 @@ public:
     template <bool B = Offline, typename = std::enable_if_t<B>> void profileUpdate(const TargetPoint& point)
     {
         updateTarget(point);
-        if (!stopped_)
-            applyTargetWithLastError();
+        stopped_ = false;
+        applyTargetWithLastError();
     }
 
     void errorUpdate()
