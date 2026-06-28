@@ -57,7 +57,7 @@ public:
     {
     }
 
-    template <typename = std::enable_if_t<!Offline>>
+    template <bool B = !Offline, typename = std::enable_if_t<B>>
     bool pushTrajectoryPoint(const TargetPoint& point)
     {
         ISRGuard lock{};
@@ -67,7 +67,7 @@ public:
     /**
      * 从缓冲区取出一个外部轨迹点作为当前目标。
      */
-    template <typename = std::enable_if_t<!Offline>> void profileUpdate()
+    template <bool B = !Offline, typename = std::enable_if_t<B>> void profileUpdate()
     {
         if (!enabled() || locked())
             return;
@@ -83,13 +83,13 @@ public:
             applyTargetWithLastError();
     }
 
-    template <typename = std::enable_if_t<!Offline>> void profileUpdate(const float dt)
+    template <bool B = !Offline, typename = std::enable_if_t<B>> void profileUpdate(const float dt)
     {
         (void)dt;
         profileUpdate();
     }
 
-    template <typename = std::enable_if_t<Offline>> void profileUpdate(const TargetPoint& point)
+    template <bool B = Offline, typename = std::enable_if_t<B>> void profileUpdate(const TargetPoint& point)
     {
         updateTarget(point);
         if (!stopped_)
