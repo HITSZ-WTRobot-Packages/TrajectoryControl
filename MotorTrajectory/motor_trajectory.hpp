@@ -114,6 +114,7 @@ public:
 
     void stop()
     {
+        ISRGuard lock{};
         stopped_    = true;
         p_ref_curr_ = getCurrentAvePosition();
         v_ref_curr_ = 0;
@@ -265,10 +266,16 @@ public:
         for (auto& ctrl : ctrl_)
             enabled &= ctrl->enable();
         if (!enabled)
+        {
             for (auto& ctrl : ctrl_)
                 ctrl->disable();
-        enabled_ = enabled;
-        return enabled;
+            return false;
+        }
+        {
+            ISRGuard lock{};
+            enabled_ = enabled;
+        }
+        return true;
     }
 
     void disable()
@@ -276,7 +283,10 @@ public:
         stop();
         for (auto& ctrl : ctrl_)
             ctrl->disable();
-        enabled_ = false;
+        {
+            ISRGuard lock{};
+            enabled_ = false;
+        }
     }
 
     [[nodiscard]] bool enabled() const { return enabled_; }

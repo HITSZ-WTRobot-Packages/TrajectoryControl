@@ -8,6 +8,7 @@
 #include "motor_vel_controller.hpp"
 #include "pid_pd.hpp"
 #include "RingBuffer.hpp"
+#include "isr_lock.h"
 
 #include <cstddef>
 #include <type_traits>
@@ -15,10 +16,12 @@
 namespace trajectory
 {
 
-template <size_t MotorNum, size_t BufferCapacity> class MotorTrajectorySlave
+template <size_t MotorNum, size_t BufferCapacity = 0, bool Offline = false>
+class MotorTrajectorySlave
 {
     static_assert(MotorNum > 0, "MotorTrajectorySlave requires at least one motor");
-    static_assert(BufferCapacity >= 2, "MotorTrajectorySlave buffer capacity must be >= 2");
+    static_assert(Offline || BufferCapacity >= 2,
+                  "MotorTrajectorySlave buffer capacity must be >= 2 when Offline is false");
 
 public:
     struct TargetPoint
@@ -54,12 +57,17 @@ public:
     {
     }
 
-    bool pushTrajectoryPoint(const TargetPoint& point) { return cmd_buffer_.push(point); }
+    template <typename = std::enable_if_t<!Offline>>
+    bool pushTrajectoryPoint(const TargetPoint& point)
+    {
+        ISRGuard lock{};
+        return cmd_buffer_.push(point);
+    }
 
     /**
      * 从缓冲区取出一个外部轨迹点作为当前目标。
      */
-    void updateProfile()
+    template <typename = std::enable_if_t<!Offline>> void profileUpdate()
     {
         if (!enabled() || locked())
             return;
@@ -75,12 +83,17 @@ public:
             applyTargetWithLastError();
     }
 
-    void profileUpdate() { updateProfile(); }
-
-    void profileUpdate(const float dt)
+    template <typename = std::enable_if_t<!Offline>> void profileUpdate(const float dt)
     {
         (void)dt;
-        updateProfile();
+        profileUpdate();
+    }
+
+    template <typename = std::enable_if_t<Offline>> void profileUpdate(const TargetPoint& point)
+    {
+        updateTarget(point);
+        if (!stopped_)
+            applyTargetWithLastError();
     }
 
     void errorUpdate()
@@ -90,8 +103,7 @@ public:
 
         for (size_t i = 0; i < MotorNum; ++i)
         {
-            const float error_output =
-                    pd_[i].calc(target_.q, ctrl_[i]->getMotor()->getAngle());
+            const float error_output = pd_[i].calc(target_.q, ctrl_[i]->getMotor()->getAngle());
             ctrl_[i]->setRef(dps2rpm(target_.dq + error_output));
         }
     }
@@ -107,10 +119,14 @@ public:
 
     void stop()
     {
-        stopped_ = true;
-        target_.q = getCurrentAvePosition();
-        target_.dq = 0.0f;
-        clearTrajectory();
+        {
+            ISRGuard lock{};
+            stopped_   = true;
+            target_.q  = getCurrentAvePosition();
+            target_.dq = 0.0f;
+            if constexpr (!Offline)
+                cmd_buffer_.clear();
+        }
 
         for (auto& p : pd_)
             p.reset();
@@ -129,11 +145,17 @@ public:
         {
             for (auto& ctrl : ctrl_)
                 ctrl->disable();
-            enabled_ = false;
+            {
+                ISRGuard lock{};
+                enabled_ = false;
+            }
             return false;
         }
 
-        enabled_ = true;
+        {
+            ISRGuard lock{};
+            enabled_ = true;
+        }
         stop();
         return true;
     }
@@ -146,18 +168,36 @@ public:
         for (auto& ctrl : ctrl_)
             ctrl->disable();
 
-        enabled_ = false;
+        {
+            ISRGuard lock{};
+            enabled_ = false;
+        }
     }
 
     [[nodiscard]] bool enabled() const { return enabled_; }
 
-    void               lock() { lock_ = true; }
-    void               unlock() { lock_ = false; }
+    void               lock()
+    {
+        ISRGuard guard{};
+        lock_ = true;
+    }
+    void               unlock()
+    {
+        ISRGuard guard{};
+        lock_ = false;
+    }
     [[nodiscard]] bool locked() const { return lock_; }
 
     [[nodiscard]] TargetPoint target() const { return target_; }
 
-    void clearTrajectory() { cmd_buffer_.clear(); }
+    void clearTrajectory()
+    {
+        if constexpr (!Offline)
+        {
+            ISRGuard lock{};
+            cmd_buffer_.clear();
+        }
+    }
 
     [[nodiscard]] float getCurrentAvePosition() const
     {
@@ -209,7 +249,14 @@ private:
 
     TargetPoint target_{};
 
-    libs::RingBuffer<TargetPoint, BufferCapacity> cmd_buffer_;
+    /// 当 Offline = true 时替代 RingBuffer 的空占位类型。
+    struct NoBuffer
+    {
+    };
+
+    [[no_unique_address]] std::conditional_t<Offline, NoBuffer,
+                                             libs::RingBuffer<TargetPoint, BufferCapacity>>
+            cmd_buffer_;
 };
 
 } // namespace trajectory
