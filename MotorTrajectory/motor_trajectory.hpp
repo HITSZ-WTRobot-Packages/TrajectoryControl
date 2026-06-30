@@ -275,6 +275,7 @@ public:
             ISRGuard lock{};
             enabled_ = enabled;
         }
+        stop();
         return true;
     }
 
