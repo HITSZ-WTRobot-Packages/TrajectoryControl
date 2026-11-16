@@ -1,0 +1,5 @@
+format_version = 1
+name = "MITTrajectory"
+version = "0.1.0"
+pkgname = "Trajectory::MITTrajectory"
+dependencies = ["MotorDrivers::Controller", "VelocityProfile::SCurve", "libs::MIT_PD","utils"]
